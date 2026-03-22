@@ -3,6 +3,8 @@
  * Алгоритм генерации лабиринта с использованием DFS (Depth-First Search)
  */
 
+import * as THREE from 'three';
+
 export class LevelGenerator {
     constructor(config) {
         this.config = config;
