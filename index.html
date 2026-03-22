@@ -103,7 +103,7 @@
     <script type="module">
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-        import { LevelGenerator } from './js/generate.js?v=3';
+        import { LevelGenerator } from './js/generate.js?v=4';
 
         // === КОНФИГУРАЦИЯ ===
         const CONFIG = {
@@ -229,9 +229,14 @@
             const instructions = document.getElementById('instructions');
 
             startBtn.addEventListener('click', () => {
-                overlay.style.display = 'none';
-                instructions.style.display = 'block';
-                controls.lock();
+                console.log('Start button clicked');
+                if (controls) {
+                    overlay.style.display = 'none';
+                    instructions.style.display = 'block';
+                    controls.lock();
+                } else {
+                    console.error('Controls not initialized');
+                }
             });
 
             controls.addEventListener('lock', () => {
