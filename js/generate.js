@@ -99,7 +99,7 @@ export class LevelGenerator {
     }
 
     // Создание комнаты Three.js
-    createRoom(materials, x, z, scene) {
+    createRoom(materials, x, z, scene, colliders) {
         const T = this.THREE;
         const roomGroup = new T.Group();
         const w = this.config.roomWidth;
@@ -157,6 +157,21 @@ export class LevelGenerator {
         roomGroup.position.set(x * w, 0, z * d);
         scene.add(roomGroup);
         this.rooms.push(roomGroup);
+
+        // Добавляем коллизии для стен
+        if (colliders) {
+            const worldX = x * w;
+            const worldZ = z * d;
+            
+            // Передняя стена
+            colliders.push(new T.Box3().setFromObject(frontWall, new T.Matrix4().makeTranslation(worldX, 0, worldZ)));
+            // Задняя стена
+            colliders.push(new T.Box3().setFromObject(backWall, new T.Matrix4().makeTranslation(worldX, 0, worldZ)));
+            // Левая стена
+            colliders.push(new T.Box3().setFromObject(leftWall, new T.Matrix4().makeTranslation(worldX, 0, worldZ)));
+            // Правая стена
+            colliders.push(new T.Box3().setFromObject(rightWall, new T.Matrix4().makeTranslation(worldX, 0, worldZ)));
+        }
 
         return roomGroup;
     }
@@ -253,7 +268,7 @@ export class LevelGenerator {
     }
 
     // Основная функция генерации уровня
-    generateLevel(materials, scene) {
+    generateLevel(materials, scene, colliders = []) {
         const gridSize = this.config.gridSize;
         const center = Math.floor(gridSize / 2);
 
@@ -264,7 +279,7 @@ export class LevelGenerator {
         for (let x = 0; x < gridSize; x++) {
             for (let z = 0; z < gridSize; z++) {
                 if (this.grid[x][z] === 1) {
-                    this.createRoom(materials, x - center, z - center, scene);
+                    this.createRoom(materials, x - center, z - center, scene, colliders);
                 }
             }
         }

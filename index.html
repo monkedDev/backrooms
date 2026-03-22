@@ -103,7 +103,7 @@
     <script type="module">
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-        import { LevelGenerator } from './js/generate.js?v=5';
+        import { LevelGenerator } from './js/generate.js?v=6';
 
         // === КОНФИГУРАЦИЯ ===
         const CONFIG = {
@@ -126,6 +126,9 @@
         let rooms = [];
         let flashlight;
         let flashlightOn = true;
+        const colliders = []; // Стены для коллизии
+        const playerRadius = 0.5;
+        const playerHeight = CONFIG.roomHeight / 2;
 
         // === ЗАГРУЗКА ТЕКСТУР ===
         const textureLoader = new THREE.TextureLoader();
@@ -216,7 +219,7 @@
             const materials = createMaterials();
 
             // Генерация уровня
-            generateLevel(materials, scene);
+            generateLevel(materials, scene, colliders);
 
             // Общее освещение
             const ambientLight = new THREE.AmbientLight(0x404040, 0.3);
@@ -300,6 +303,20 @@
         }
 
         // === АНИМАЦИЯ ===
+        function checkCollision(newPos) {
+            const playerBox = new THREE.Box3();
+            const min = new THREE.Vector3(newPos.x - playerRadius, 0, newPos.z - playerRadius);
+            const max = new THREE.Vector3(newPos.x + playerRadius, playerHeight * 2, newPos.z + playerRadius);
+            playerBox.set(min, max);
+
+            for (const collider of colliders) {
+                if (playerBox.intersectsBox(collider)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         function animate() {
             requestAnimationFrame(animate);
 
@@ -321,9 +338,24 @@
                 if (moveForward || moveBackward) velocity.z -= direction.z * speed * 10.0 * delta;
                 if (moveLeft || moveRight) velocity.x -= direction.x * speed * 10.0 * delta;
 
-                // Движение
-                controls.moveRight(-velocity.x * delta);
-                controls.moveForward(-velocity.z * delta);
+                // Пробуем двигаться с проверкой коллизий
+                const oldPos = camera.position.clone();
+                
+                // Движение вправо/влево
+                const rightDelta = -velocity.x * delta;
+                controls.moveRight(rightDelta);
+                if (checkCollision(camera.position)) {
+                    camera.position.x = oldPos.x;
+                    velocity.x = 0;
+                }
+                
+                // Движение вперёд/назад
+                const forwardDelta = -velocity.z * delta;
+                controls.moveForward(forwardDelta);
+                if (checkCollision(camera.position)) {
+                    camera.position.z = oldPos.z;
+                    velocity.z = 0;
+                }
 
                 // Ограничение высоты камеры
                 camera.position.y = CONFIG.roomHeight / 2;
