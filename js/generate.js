@@ -3,11 +3,10 @@
  * Алгоритм генерации лабиринта с использованием DFS (Depth-First Search)
  */
 
-import * as THREE from 'three';
-
 export class LevelGenerator {
-    constructor(config) {
+    constructor(config, THREE) {
         this.config = config;
+        this.THREE = THREE;
         this.grid = [];
         this.rooms = [];
     }
@@ -18,7 +17,7 @@ export class LevelGenerator {
         for (let x = 0; x < size; x++) {
             this.grid[x] = [];
             for (let z = 0; z < size; z++) {
-                this.grid[x][z] = 0; // 0 = пусто, 1 = комната
+                this.grid[x][z] = 0;
             }
         }
     }
@@ -32,10 +31,10 @@ export class LevelGenerator {
     getUnvisitedNeighbors(x, z, size) {
         const neighbors = [];
         const directions = [
-            { dx: 0, dz: -2 }, // север
-            { dx: 0, dz: 2 },  // юг
-            { dx: -2, dz: 0 }, // запад
-            { dx: 2, dz: 0 }   // восток
+            { dx: 0, dz: -2 },
+            { dx: 0, dz: 2 },
+            { dx: -2, dz: 0 },
+            { dx: 2, dz: 0 }
         ];
 
         for (const dir of directions) {
@@ -101,15 +100,16 @@ export class LevelGenerator {
 
     // Создание комнаты Three.js
     createRoom(materials, x, z, scene) {
-        const roomGroup = new THREE.Group();
+        const T = this.THREE;
+        const roomGroup = new T.Group();
         const w = this.config.roomWidth;
         const h = this.config.roomHeight;
         const d = this.config.roomDepth;
         const wallThickness = 0.2;
 
         // Пол
-        const floor = new THREE.Mesh(
-            new THREE.PlaneGeometry(w, d),
+        const floor = new T.Mesh(
+            new T.PlaneGeometry(w, d),
             materials.carpet
         );
         floor.rotation.x = -Math.PI / 2;
@@ -117,8 +117,8 @@ export class LevelGenerator {
         roomGroup.add(floor);
 
         // Потолок
-        const ceiling = new THREE.Mesh(
-            new THREE.PlaneGeometry(w, d),
+        const ceiling = new T.Mesh(
+            new T.PlaneGeometry(w, d),
             materials.ceiling
         );
         ceiling.rotation.x = Math.PI / 2;
@@ -126,29 +126,29 @@ export class LevelGenerator {
         roomGroup.add(ceiling);
 
         // Стены
-        const frontWall = new THREE.Mesh(
-            new THREE.BoxGeometry(w, h, wallThickness),
+        const frontWall = new T.Mesh(
+            new T.BoxGeometry(w, h, wallThickness),
             materials.wallpaper
         );
         frontWall.position.set(0, h / 2, -d / 2);
         roomGroup.add(frontWall);
 
-        const backWall = new THREE.Mesh(
-            new THREE.BoxGeometry(w, h, wallThickness),
+        const backWall = new T.Mesh(
+            new T.BoxGeometry(w, h, wallThickness),
             materials.wallpaper
         );
         backWall.position.set(0, h / 2, d / 2);
         roomGroup.add(backWall);
 
-        const leftWall = new THREE.Mesh(
-            new THREE.BoxGeometry(wallThickness, h, d),
+        const leftWall = new T.Mesh(
+            new T.BoxGeometry(wallThickness, h, d),
             materials.wallpaper
         );
         leftWall.position.set(-w / 2, h / 2, 0);
         roomGroup.add(leftWall);
 
-        const rightWall = new THREE.Mesh(
-            new THREE.BoxGeometry(wallThickness, h, d),
+        const rightWall = new T.Mesh(
+            new T.BoxGeometry(wallThickness, h, d),
             materials.wallpaper
         );
         rightWall.position.set(w / 2, h / 2, 0);
@@ -163,15 +163,16 @@ export class LevelGenerator {
 
     // Создание коридора
     createCorridor(materials, x1, z1, x2, z2, scene) {
-        const corridorGroup = new THREE.Group();
+        const T = this.THREE;
+        const corridorGroup = new T.Group();
         const h = this.config.roomHeight;
         const wallThickness = 0.2;
         const corridorW = this.config.corridorWidth;
         const corridorD = this.config.roomWidth;
 
         // Пол
-        const floor = new THREE.Mesh(
-            new THREE.PlaneGeometry(corridorW, corridorD),
+        const floor = new T.Mesh(
+            new T.PlaneGeometry(corridorW, corridorD),
             materials.carpet
         );
         floor.rotation.x = -Math.PI / 2;
@@ -179,8 +180,8 @@ export class LevelGenerator {
         corridorGroup.add(floor);
 
         // Потолок
-        const ceiling = new THREE.Mesh(
-            new THREE.PlaneGeometry(corridorW, corridorD),
+        const ceiling = new T.Mesh(
+            new T.PlaneGeometry(corridorW, corridorD),
             materials.ceiling
         );
         ceiling.rotation.x = Math.PI / 2;
@@ -188,15 +189,15 @@ export class LevelGenerator {
         corridorGroup.add(ceiling);
 
         // Стены
-        const sideWall1 = new THREE.Mesh(
-            new THREE.BoxGeometry(wallThickness, h, corridorD),
+        const sideWall1 = new T.Mesh(
+            new T.BoxGeometry(wallThickness, h, corridorD),
             materials.wallpaper
         );
         sideWall1.position.set(-corridorW / 2, h / 2, 0);
         corridorGroup.add(sideWall1);
 
-        const sideWall2 = new THREE.Mesh(
-            new THREE.BoxGeometry(wallThickness, h, corridorD),
+        const sideWall2 = new T.Mesh(
+            new T.BoxGeometry(wallThickness, h, corridorD),
             materials.wallpaper
         );
         sideWall2.position.set(corridorW / 2, h / 2, 0);
@@ -221,29 +222,31 @@ export class LevelGenerator {
 
     // Добавление света
     addLight(parent, height, intensity = 1, distance = 15) {
-        const lightGeometry = new THREE.BoxGeometry(0.3, 0.1, 0.3);
-        const lightMaterial = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
-        const light = new THREE.Mesh(lightGeometry, lightMaterial);
+        const T = this.THREE;
+        const lightGeometry = new T.BoxGeometry(0.3, 0.1, 0.3);
+        const lightMaterial = new T.MeshBasicMaterial({ color: 0xffaa00 });
+        const light = new T.Mesh(lightGeometry, lightMaterial);
         light.position.set(0, height - 0.1, 0);
         parent.add(light);
 
-        const pointLight = new THREE.PointLight(0xffaa00, intensity, distance);
+        const pointLight = new T.PointLight(0xffaa00, intensity, distance);
         pointLight.position.copy(light.position);
         parent.add(pointLight);
     }
 
     // Добавление ламп в комнату
     addRoomLights(room) {
+        const T = this.THREE;
         if (Math.random() > 0.25) {
             const offsetX = (Math.random() - 0.5) * this.config.roomWidth * 0.6;
             const offsetZ = (Math.random() - 0.5) * this.config.roomDepth * 0.6;
-            const lightGeometry = new THREE.BoxGeometry(0.3, 0.1, 0.3);
-            const lightMaterial = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
-            const light = new THREE.Mesh(lightGeometry, lightMaterial);
+            const lightGeometry = new T.BoxGeometry(0.3, 0.1, 0.3);
+            const lightMaterial = new T.MeshBasicMaterial({ color: 0xffaa00 });
+            const light = new T.Mesh(lightGeometry, lightMaterial);
             light.position.set(offsetX, this.config.roomHeight - 0.1, offsetZ);
             room.add(light);
 
-            const pointLight = new THREE.PointLight(0xffaa00, 1, 15);
+            const pointLight = new T.PointLight(0xffaa00, 1, 15);
             pointLight.position.copy(light.position);
             room.add(pointLight);
         }
