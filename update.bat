@@ -14,7 +14,7 @@ echo [2/3] Creating commit...
 git commit -m "update: auto commit"
 
 echo [3/3] Pushing to GitHub...
-git push -u origin master
+git push -u origin main
 
 echo.
 echo ====================================
