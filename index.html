@@ -214,7 +214,7 @@
             const materials = createMaterials();
 
             // Генерация уровня
-            generateLevel(materials);
+            generateLevel(materials, scene);
 
             // Общее освещение
             const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
