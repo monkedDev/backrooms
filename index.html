@@ -87,7 +87,7 @@
     </div>
     <div id="loading">Загрузка...</div>
     <div id="instructions">
-        WASD - движение | SHIFT - бег | Мышь - обзор | ESC - пауза
+        WASD - движение | SHIFT - бег | Мышь - обзор | F - фонарик | ESC - пауза
     </div>
     <canvas id="canvas"></canvas>
 
@@ -103,7 +103,7 @@
     <script type="module">
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
-        import { LevelGenerator } from './js/generate.js?v=4';
+        import { LevelGenerator } from './js/generate.js?v=5';
 
         // === КОНФИГУРАЦИЯ ===
         const CONFIG = {
@@ -111,7 +111,7 @@
             roomHeight: 3.5,
             roomDepth: 10,
             corridorWidth: 3,
-            gridSize: 7,
+            gridSize: 9,
             moveSpeed: 5,
             runSpeed: 10,
             lookSpeed: 0.002
@@ -124,6 +124,8 @@
         const velocity = new THREE.Vector3();
         const direction = new THREE.Vector3();
         let rooms = [];
+        let flashlight;
+        let flashlightOn = true;
 
         // === ЗАГРУЗКА ТЕКСТУР ===
         const textureLoader = new THREE.TextureLoader();
@@ -189,7 +191,7 @@
             // Сцена
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x1a1a1a);
-            scene.fog = new THREE.FogExp2(0x1a1a1a, 0.03);
+            scene.fog = new THREE.FogExp2(0x1a1a1a, 0.015);
 
             // Камера
             camera = new THREE.PerspectiveCamera(
@@ -217,8 +219,16 @@
             generateLevel(materials, scene);
 
             // Общее освещение
-            const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.3);
             scene.add(ambientLight);
+
+            // Фонарик
+            flashlight = new THREE.SpotLight(0xffffee, 2, 25, Math.PI / 6, 0.5, 1);
+            flashlight.position.set(0, 0, 0);
+            flashlight.target.position.set(0, 0, -1);
+            camera.add(flashlight);
+            camera.add(flashlight.target);
+            scene.add(camera);
 
             // Controls
             controls = new PointerLockControls(camera, document.body);
@@ -266,6 +276,12 @@
                     case 'KeyA': moveLeft = false; break;
                     case 'KeyD': moveRight = false; break;
                     case 'ShiftLeft': isRunning = false; break;
+                    case 'KeyF': 
+                        if (flashlight) {
+                            flashlightOn = !flashlightOn;
+                            flashlight.intensity = flashlightOn ? 2 : 0;
+                        }
+                        break;
                 }
             };
 
