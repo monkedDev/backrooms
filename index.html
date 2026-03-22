@@ -103,6 +103,7 @@
     <script type="module">
         import * as THREE from 'three';
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+        import { LevelGenerator } from './js/generate.js';
 
         // === КОНФИГУРАЦИЯ ===
         const CONFIG = {
@@ -110,7 +111,7 @@
             roomHeight: 3.5,
             roomDepth: 10,
             corridorWidth: 3,
-            gridSize: 5,
+            gridSize: 7,
             moveSpeed: 5,
             runSpeed: 10,
             lookSpeed: 0.002
@@ -122,7 +123,7 @@
         let prevTime = performance.now();
         const velocity = new THREE.Vector3();
         const direction = new THREE.Vector3();
-        const rooms = [];
+        let rooms = [];
 
         // === ЗАГРУЗКА ТЕКСТУР ===
         const textureLoader = new THREE.TextureLoader();
@@ -140,13 +141,11 @@
                     textures.ceiling = textureLoader.load('textures/ceiling_tiles_color.png', resolve);
                 })
             ]).then(() => {
-                // Настройка текстур
                 Object.values(textures).forEach(texture => {
                     texture.wrapS = THREE.RepeatWrapping;
                     texture.wrapT = THREE.RepeatWrapping;
                     texture.colorSpace = THREE.SRGBColorSpace;
                 });
-                
                 textures.wallpaper.repeat.set(2, 2);
                 textures.carpet.repeat.set(2, 2);
                 textures.ceiling.repeat.set(2, 2);
@@ -174,252 +173,10 @@
             };
         }
 
-        // === ГЕНЕРАЦИЯ КОМНАТЫ ===
-        function createRoom(materials, x, z) {
-            const roomGroup = new THREE.Group();
-            const w = CONFIG.roomWidth;
-            const h = CONFIG.roomHeight;
-            const d = CONFIG.roomDepth;
-
-            // Пол
-            const floor = new THREE.Mesh(
-                new THREE.PlaneGeometry(w, d),
-                materials.carpet
-            );
-            floor.rotation.x = -Math.PI / 2;
-            floor.position.y = 0;
-            roomGroup.add(floor);
-
-            // Потолок
-            const ceiling = new THREE.Mesh(
-                new THREE.PlaneGeometry(w, d),
-                materials.ceiling
-            );
-            ceiling.rotation.x = Math.PI / 2;
-            ceiling.position.y = h;
-            roomGroup.add(ceiling);
-
-            // Стены
-            const wallThickness = 0.2;
-            
-            // Передняя стена
-            const frontWall = new THREE.Mesh(
-                new THREE.BoxGeometry(w, h, wallThickness),
-                materials.wallpaper
-            );
-            frontWall.position.set(0, h / 2, -d / 2);
-            roomGroup.add(frontWall);
-
-            // Задняя стена
-            const backWall = new THREE.Mesh(
-                new THREE.BoxGeometry(w, h, wallThickness),
-                materials.wallpaper
-            );
-            backWall.position.set(0, h / 2, d / 2);
-            roomGroup.add(backWall);
-
-            // Левая стена
-            const leftWall = new THREE.Mesh(
-                new THREE.BoxGeometry(wallThickness, h, d),
-                materials.wallpaper
-            );
-            leftWall.position.set(-w / 2, h / 2, 0);
-            roomGroup.add(leftWall);
-
-            // Правая стена
-            const rightWall = new THREE.Mesh(
-                new THREE.BoxGeometry(wallThickness, h, d),
-                materials.wallpaper
-            );
-            rightWall.position.set(w / 2, h / 2, 0);
-            roomGroup.add(rightWall);
-
-            roomGroup.position.set(x * w, 0, z * d);
-            scene.add(roomGroup);
-            rooms.push(roomGroup);
-
-            return roomGroup;
-        }
-
         // === ГЕНЕРАЦИЯ УРОВНЯ ===
-        const grid = [];
-
-        function initGrid(size) {
-            for (let x = 0; x < size; x++) {
-                grid[x] = [];
-                for (let z = 0; z < size; z++) {
-                    grid[x][z] = 0;
-                }
-            }
-        }
-
-        function isValid(x, z, size) {
-            return x >= 0 && z >= 0 && x < size && z < size;
-        }
-
-        function getUnvisitedNeighbors(x, z, size) {
-            const neighbors = [];
-            const directions = [
-                { dx: 0, dz: -2 },
-                { dx: 0, dz: 2 },
-                { dx: -2, dz: 0 },
-                { dx: 2, dz: 0 }
-            ];
-
-            for (const dir of directions) {
-                const nx = x + dir.dx;
-                const nz = z + dir.dz;
-                if (isValid(nx, nz, size) && grid[nx][nz] === 0) {
-                    neighbors.push({ x: nx, z: nz, dx: dir.dx / 2, dz: dir.dz / 2 });
-                }
-            }
-            return neighbors;
-        }
-
-        function generateMaze(size) {
-            initGrid(size);
-            
-            const startX = Math.floor(size / 2);
-            const startZ = Math.floor(size / 2);
-            
-            const stack = [{ x: startX, z: startZ }];
-            grid[startX][startZ] = 1;
-
-            while (stack.length > 0) {
-                const current = stack[stack.length - 1];
-                const neighbors = getUnvisitedNeighbors(current.x, current.z, size);
-
-                if (neighbors.length === 0) {
-                    stack.pop();
-                } else {
-                    const next = neighbors[Math.floor(Math.random() * neighbors.length)];
-                    grid[next.x][next.z] = 1;
-                    grid[current.x + next.dx][current.z + next.dz] = 1;
-                    stack.push({ x: next.x, z: next.z });
-                }
-            }
-
-            // Добавляем случайные комнаты
-            for (let x = 0; x < size; x++) {
-                for (let z = 0; z < size; z++) {
-                    if (grid[x][z] === 0 && Math.random() < 0.15) {
-                        const hasNeighbor = 
-                            (isValid(x-1, z, size) && grid[x-1][z] === 1) ||
-                            (isValid(x+1, z, size) && grid[x+1][z] === 1) ||
-                            (isValid(x, z-1, size) && grid[x][z-1] === 1) ||
-                            (isValid(x, z+1, size) && grid[x][z+1] === 1);
-                        if (hasNeighbor) grid[x][z] = 1;
-                    }
-                }
-            }
-        }
-
-        function createCorridor(materials, x1, z1, x2, z2) {
-            const corridorGroup = new THREE.Group();
-            const h = CONFIG.roomHeight;
-            const wallThickness = 0.2;
-            const corridorW = CONFIG.corridorWidth;
-            const corridorD = CONFIG.roomWidth;
-
-            const floor = new THREE.Mesh(
-                new THREE.PlaneGeometry(corridorW, corridorD),
-                materials.carpet
-            );
-            floor.rotation.x = -Math.PI / 2;
-            floor.position.y = 0;
-            corridorGroup.add(floor);
-
-            const ceiling = new THREE.Mesh(
-                new THREE.PlaneGeometry(corridorW, corridorD),
-                materials.ceiling
-            );
-            ceiling.rotation.x = Math.PI / 2;
-            ceiling.position.y = h;
-            corridorGroup.add(ceiling);
-
-            const sideWall1 = new THREE.Mesh(
-                new THREE.BoxGeometry(wallThickness, h, corridorD),
-                materials.wallpaper
-            );
-            sideWall1.position.set(-corridorW / 2, h / 2, 0);
-            corridorGroup.add(sideWall1);
-
-            const sideWall2 = new THREE.Mesh(
-                new THREE.BoxGeometry(wallThickness, h, corridorD),
-                materials.wallpaper
-            );
-            sideWall2.position.set(corridorW / 2, h / 2, 0);
-            corridorGroup.add(sideWall2);
-
-            const midX = (x1 + x2) / 2 * CONFIG.roomWidth;
-            const midZ = (z1 + z2) / 2 * CONFIG.roomDepth;
-            corridorGroup.position.set(midX, 0, midZ);
-
-            if (x1 === x2) {
-                corridorGroup.rotation.y = Math.PI / 2;
-            }
-
-            scene.add(corridorGroup);
-
-            if (Math.random() > 0.5) {
-                const lightGeometry = new THREE.BoxGeometry(0.2, 0.05, 0.2);
-                const lightMaterial = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
-                const light = new THREE.Mesh(lightGeometry, lightMaterial);
-                light.position.set(0, h - 0.1, 0);
-                corridorGroup.add(light);
-
-                const pointLight = new THREE.PointLight(0xffaa00, 0.8, 12);
-                pointLight.position.copy(light.position);
-                corridorGroup.add(pointLight);
-            }
-        }
-
-        function generateLevel(materials) {
-            const gridSize = CONFIG.gridSize;
-            const center = Math.floor(gridSize / 2);
-
-            generateMaze(gridSize);
-
-            for (let x = 0; x < gridSize; x++) {
-                for (let z = 0; z < gridSize; z++) {
-                    if (grid[x][z] === 1) {
-                        createRoom(materials, x - center, z - center);
-                    }
-                }
-            }
-
-            for (let x = 0; x < gridSize; x++) {
-                for (let z = 0; z < gridSize; z++) {
-                    if (grid[x][z] === 1) {
-                        if (x + 1 < gridSize && grid[x + 1][z] === 1) {
-                            createCorridor(materials, x, z, x + 1, z);
-                        }
-                        if (z + 1 < gridSize && grid[x][z + 1] === 1) {
-                            createCorridor(materials, x, z, x, z + 1);
-                        }
-                    }
-                }
-            }
-
-            rooms.forEach((room, index) => {
-                if (Math.random() > 0.25) {
-                    const lightGeometry = new THREE.BoxGeometry(0.3, 0.1, 0.3);
-                    const lightMaterial = new THREE.MeshBasicMaterial({
-                        color: 0xffaa00
-                    });
-                    const light = new THREE.Mesh(lightGeometry, lightMaterial);
-                    light.position.set(
-                        (Math.random() - 0.5) * CONFIG.roomWidth * 0.6,
-                        CONFIG.roomHeight - 0.1,
-                        (Math.random() - 0.5) * CONFIG.roomDepth * 0.6
-                    );
-                    room.add(light);
-
-                    const pointLight = new THREE.PointLight(0xffaa00, 1, 15);
-                    pointLight.position.copy(light.position);
-                    room.add(pointLight);
-                }
-            });
+        function generateLevel(materials, scene) {
+            const generator = new LevelGenerator(CONFIG);
+            rooms = generator.generateLevel(materials, scene);
         }
 
         // === ИНИЦИАЛИЗАЦИЯ ===
