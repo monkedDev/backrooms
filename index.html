@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Backrooms - 3D Web Experience</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: 'Courier New', monospace;
+        }
+        #canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        #overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #d4a017;
+            z-index: 100;
+        }
+        #overlay h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            text-shadow: 0 0 10px #d4a017;
+        }
+        #overlay p {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            color: #aaa;
+        }
+        #start-btn {
+            padding: 15px 40px;
+            font-size: 1.3rem;
+            background: #d4a017;
+            color: #000;
+            border: none;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        #start-btn:hover {
+            background: #f4c047;
+            transform: scale(1.05);
+        }
+        #instructions {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.9rem;
+            z-index: 50;
+            display: none;
+        }
+        #loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #d4a017;
+            font-size: 1.5rem;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="overlay">
+        <h1>THE BACKROOMS</h1>
+        <p>Level 0 - Lobby</p>
+        <button id="start-btn">ВОЙТИ</button>
+    </div>
+    <div id="loading">Загрузка...</div>
+    <div id="instructions">
+        WASD - движение | SHIFT - бег | Мышь - обзор | ESC - пауза
+    </div>
+    <canvas id="canvas"></canvas>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // === КОНФИГУРАЦИЯ ===
+        const CONFIG = {
+            roomWidth: 10,
+            roomHeight: 3.5,
+            roomDepth: 10,
+            corridorWidth: 3,
+            gridSize: 5,
+            moveSpeed: 5,
+            runSpeed: 10,
+            lookSpeed: 0.002
+        };
+
+        // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
+        let scene, camera, renderer, controls;
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, isRunning = false;
+        let prevTime = performance.now();
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        const rooms = [];
+
+        // === ЗАГРУЗКА ТЕКСТУР ===
+        const textureLoader = new THREE.TextureLoader();
+        const textures = {};
+
+        async function loadTextures() {
+            return Promise.all([
+                new Promise((resolve) => {
+                    textures.wallpaper = textureLoader.load('textures/wallpaper_color.png', resolve);
+                }),
+                new Promise((resolve) => {
+                    textures.carpet = textureLoader.load('textures/carpet_color.png', resolve);
+                }),
+                new Promise((resolve) => {
+                    textures.ceiling = textureLoader.load('textures/ceiling_tiles_color.png', resolve);
+                })
+            ]).then(() => {
+                // Настройка текстур
+                Object.values(textures).forEach(texture => {
+                    texture.wrapS = THREE.RepeatWrapping;
+                    texture.wrapT = THREE.RepeatWrapping;
+                    texture.colorSpace = THREE.SRGBColorSpace;
+                });
+                
+                textures.wallpaper.repeat.set(2, 2);
+                textures.carpet.repeat.set(2, 2);
+                textures.ceiling.repeat.set(2, 2);
+            });
+        }
+
+        // === СОЗДАНИЕ МАТЕРИАЛОВ ===
+        function createMaterials() {
+            return {
+                wallpaper: new THREE.MeshStandardMaterial({
+                    map: textures.wallpaper,
+                    roughness: 0.8,
+                    metalness: 0.1
+                }),
+                carpet: new THREE.MeshStandardMaterial({
+                    map: textures.carpet,
+                    roughness: 0.9,
+                    metalness: 0.0
+                }),
+                ceiling: new THREE.MeshStandardMaterial({
+                    map: textures.ceiling,
+                    roughness: 0.7,
+                    metalness: 0.1
+                })
+            };
+        }
+
+        // === ГЕНЕРАЦИЯ КОМНАТЫ ===
+        function createRoom(materials, x, z) {
+            const roomGroup = new THREE.Group();
+            const w = CONFIG.roomWidth;
+            const h = CONFIG.roomHeight;
+            const d = CONFIG.roomDepth;
+
+            // Пол
+            const floor = new THREE.Mesh(
+                new THREE.PlaneGeometry(w, d),
+                materials.carpet
+            );
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.y = 0;
+            roomGroup.add(floor);
+
+            // Потолок
+            const ceiling = new THREE.Mesh(
+                new THREE.PlaneGeometry(w, d),
+                materials.ceiling
+            );
+            ceiling.rotation.x = Math.PI / 2;
+            ceiling.position.y = h;
+            roomGroup.add(ceiling);
+
+            // Стены
+            const wallThickness = 0.2;
+            
+            // Передняя стена
+            const frontWall = new THREE.Mesh(
+                new THREE.BoxGeometry(w, h, wallThickness),
+                materials.wallpaper
+            );
+            frontWall.position.set(0, h / 2, -d / 2);
+            roomGroup.add(frontWall);
+
+            // Задняя стена
+            const backWall = new THREE.Mesh(
+                new THREE.BoxGeometry(w, h, wallThickness),
+                materials.wallpaper
+            );
+            backWall.position.set(0, h / 2, d / 2);
+            roomGroup.add(backWall);
+
+            // Левая стена
+            const leftWall = new THREE.Mesh(
+                new THREE.BoxGeometry(wallThickness, h, d),
+                materials.wallpaper
+            );
+            leftWall.position.set(-w / 2, h / 2, 0);
+            roomGroup.add(leftWall);
+
+            // Правая стена
+            const rightWall = new THREE.Mesh(
+                new THREE.BoxGeometry(wallThickness, h, d),
+                materials.wallpaper
+            );
+            rightWall.position.set(w / 2, h / 2, 0);
+            roomGroup.add(rightWall);
+
+            roomGroup.position.set(x * w, 0, z * d);
+            scene.add(roomGroup);
+            rooms.push(roomGroup);
+
+            return roomGroup;
+        }
+
+        // === ГЕНЕРАЦИЯ УРОВНЯ ===
+        function generateLevel(materials) {
+            const gridSize = CONFIG.gridSize;
+            const center = Math.floor(gridSize / 2);
+
+            // Создаём сетку комнат
+            for (let x = 0; x < gridSize; x++) {
+                for (let z = 0; z < gridSize; z++) {
+                    // Пропускаем некоторые комнаты для создания лабиринта
+                    if (Math.random() > 0.8 && !(x === center && z === center)) {
+                        continue;
+                    }
+                    createRoom(materials, x - center, z - center);
+                }
+            }
+
+            // Добавляем лампы на потолок в каждой комнате
+            rooms.forEach((room, index) => {
+                if (Math.random() > 0.3) {
+                    const lightGeometry = new THREE.BoxGeometry(0.3, 0.1, 0.3);
+                    const lightMaterial = new THREE.MeshBasicMaterial({ 
+                        color: 0xffaa00 
+                    });
+                    const light = new THREE.Mesh(lightGeometry, lightMaterial);
+                    light.position.set(
+                        (Math.random() - 0.5) * CONFIG.roomWidth * 0.6,
+                        CONFIG.roomHeight - 0.1,
+                        (Math.random() - 0.5) * CONFIG.roomDepth * 0.6
+                    );
+                    room.add(light);
+
+                    // Точечный свет от лампы
+                    const pointLight = new THREE.PointLight(0xffaa00, 1, 15);
+                    pointLight.position.copy(light.position);
+                    room.add(pointLight);
+                }
+            });
+        }
+
+        // === ИНИЦИАЛИЗАЦИЯ ===
+        async function init() {
+            // Загрузка текстур
+            document.getElementById('loading').style.display = 'block';
+            await loadTextures();
+            document.getElementById('loading').style.display = 'none';
+
+            // Сцена
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            scene.fog = new THREE.FogExp2(0x1a1a1a, 0.03);
+
+            // Камера
+            camera = new THREE.PerspectiveCamera(
+                75,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                1000
+            );
+            camera.position.set(0, CONFIG.roomHeight / 2, 0);
+
+            // Рендерер
+            renderer = new THREE.WebGLRenderer({ 
+                canvas: document.getElementById('canvas'),
+                antialias: true 
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            // Материалы
+            const materials = createMaterials();
+
+            // Генерация уровня
+            generateLevel(materials);
+
+            // Общее освещение
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+            scene.add(ambientLight);
+
+            // Controls
+            controls = new PointerLockControls(camera, document.body);
+
+            // Обработчики событий
+            const overlay = document.getElementById('overlay');
+            const startBtn = document.getElementById('start-btn');
+            const instructions = document.getElementById('instructions');
+
+            startBtn.addEventListener('click', () => {
+                overlay.style.display = 'none';
+                instructions.style.display = 'block';
+                controls.lock();
+            });
+
+            controls.addEventListener('lock', () => {
+                instructions.style.display = 'block';
+            });
+
+            controls.addEventListener('unlock', () => {
+                overlay.style.display = 'flex';
+                instructions.style.display = 'none';
+            });
+
+            // Управление клавишами
+            const onKeyDown = (event) => {
+                switch (event.code) {
+                    case 'KeyW': moveForward = true; break;
+                    case 'KeyS': moveBackward = true; break;
+                    case 'KeyA': moveLeft = true; break;
+                    case 'KeyD': moveRight = true; break;
+                    case 'ShiftLeft': isRunning = true; break;
+                }
+            };
+
+            const onKeyUp = (event) => {
+                switch (event.code) {
+                    case 'KeyW': moveForward = false; break;
+                    case 'KeyS': moveBackward = false; break;
+                    case 'KeyA': moveLeft = false; break;
+                    case 'KeyD': moveRight = false; break;
+                    case 'ShiftLeft': isRunning = false; break;
+                }
+            };
+
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+
+            // Изменение размера окна
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            // Запуск цикла анимации
+            animate();
+        }
+
+        // === АНИМАЦИЯ ===
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+
+            if (controls.isLocked) {
+                // Затухание скорости
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+
+                // Направление движения
+                direction.z = Number(moveForward) - Number(moveBackward);
+                direction.x = Number(moveRight) - Number(moveLeft);
+                direction.normalize();
+
+                // Ускорение
+                const speed = isRunning ? CONFIG.runSpeed : CONFIG.moveSpeed;
+                if (moveForward || moveBackward) velocity.z -= direction.z * speed * 10.0 * delta;
+                if (moveLeft || moveRight) velocity.x -= direction.x * speed * 10.0 * delta;
+
+                // Движение
+                controls.moveRight(-velocity.x * delta);
+                controls.moveForward(-velocity.z * delta);
+
+                // Ограничение высоты камеры
+                camera.position.y = CONFIG.roomHeight / 2;
+            }
+
+            prevTime = time;
+            renderer.render(scene, camera);
+        }
+
+        // Запуск
+        init();
+    </script>
+</body>
+</html>
